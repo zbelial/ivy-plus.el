@@ -1,2 +1,2 @@
-# counsel-plus.el
-New counsel commands or enhance some existing counsel commands.
+# ivy-plus.el
+New counsel commands or enhancement to some existing counsel commands.
