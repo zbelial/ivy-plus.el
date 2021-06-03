@@ -8,7 +8,7 @@
 ;; Created: 2021-06-03 14:08:12
 ;; Version: 0.1
 ;; URL: https://github.com/zbelial/ivy-plus.el
-;; Package-Requires: ((ivy "0.13.0"))
+;; Package-Requires: ((ivy "0.13.0") (pinyinlib "0.1.1") (pyim "3.7.9"))
 ;; Keywords:
 ;; Compatibility: GNU Emacs 27.1
 ;;
@@ -38,6 +38,8 @@
 
 (require 'ivy)
 (require 'counsel)
+(require 'pyim)
+(require 'pinyinlib)
 
 (defgroup ivy-plus nil
   "New counsel commands or enhancement to some existing counsel commands."
@@ -67,7 +69,7 @@
                               :action #'ivy--switch-buffer-action
                               :update-fn #'ivy-switch-buffer+-update-fn
                               :matcher #'ivy--switch-buffer-matcher
-                              :caller 'ivy-switch-buffer+))
+                              :caller 'ivy-switch-buffer))
           )
       (unless res
         (switch-to-buffer ivy-switch-buffer+-obuf t)
@@ -90,7 +92,7 @@
       (when (not (string-empty-p current))
         (setq item (nth (get-text-property 0 'idx current) (ivy-state-collection ivy-last)))
         (setq marker (cddr item))
-        (goto-char (marker-position marker))
+        (goto-char marker)
         (recenter)
         (let ((pulse-delay 0.75))
           (pulse-momentary-highlight-one-line (point))
@@ -141,5 +143,96 @@
         )
       )
     ))
+
+(defvar counsel-outline+-opoint nil)
+
+(defun counsel-outline+-update-fn ()
+  (with-ivy-window
+    (let ((current (ivy-state-current ivy-last))
+          item
+          marker
+          )
+      ;; (message "current %S" current)
+      (when (not (string-empty-p current))
+        (setq item (nth (get-text-property 0 'idx current) (ivy-state-collection ivy-last)))
+        ;; (message "item %S" item)
+        (setq marker (cdr item))
+        ;; (message "marker %S" marker)
+        (goto-char marker)
+        (recenter)
+        (let ((pulse-delay 0.75))
+          (pulse-momentary-highlight-one-line (point))
+          )
+        ))))
+
+(defun counsel-outline+ ()
+  "Jump to an outline heading with completion."
+  (interactive)
+  (setq counsel-outline+-opoint (point))
+  
+  (let ((settings (cdr (assq major-mode counsel-outline-settings)))
+        res)
+    (unwind-protect
+        (and
+         (setq res (ivy-read "Outline: " (counsel-outline-candidates settings)
+                             :action (or (plist-get settings :action)
+                                         #'counsel-outline-action)
+                             :history (or (plist-get settings :history)
+                                          'counsel-outline-history)
+                             :preselect (max (1- counsel-outline--preselect) 0)
+                             :update-fn #'counsel-outline+-update-fn
+                             :caller (or (plist-get settings :caller)
+                                         'counsel-outline+)))
+         (point)
+         )
+      (unless res
+        (goto-char counsel-outline+-opoint)
+        )
+      )))
+
+
+(defun ivy-regex-pyim (str)
+  (let ((x (ivy--regex-plus str))
+        (case-fold-search nil))
+    (if (listp x)
+        (mapcar (lambda (y)
+                  (if (cdr y)
+                      (list (if (equal (car y) "")
+                                ""
+                              (pyim-cregexp-build (car y)))
+                            (cdr y))
+                    (list (pyim-cregexp-build (car y)))))
+                x)
+      (pyim-cregexp-build x))))
+
+(defun ivy--pinyinlib-build-regexp-string (str)
+  (progn
+    (cond ((equal str ".*")
+           ".*")
+          (t
+           (ivy--pinyinlib-build-regexp-string str t)))))
+
+(defun ivy--pinyin-regexp-helper (str)
+  (cond ((equal str " ")
+         ".*")
+        ((equal str "")
+         nil)
+        (t
+         str)))
+
+(defun ivy--pinyin-to-utf8 (str)
+  (cond ((equal 0 (length str))
+         nil)
+        (t
+         (mapconcat 'ivy--pinyinlib-build-regexp-string
+                    (remove nil (mapcar 'ivy--pinyin-regexp-helper (split-string str "")))
+                    ""))
+        nil))
+
+(defun ivy-regex-pinyinlib (str)
+  (or (ivy--pinyin-to-utf8 str)
+      (ivy--regex-plus str)
+      (ivy--regex-ignore-order str)
+      ))
 
 (provide 'ivy-plus)
