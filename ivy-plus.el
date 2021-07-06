@@ -210,7 +210,7 @@
     (cond ((equal str ".*")
            ".*")
           (t
-           (ivy--pinyinlib-build-regexp-string str t)))))
+           (pinyinlib-build-regexp-string str t)))))
 
 (defun ivy--pinyin-regexp-helper (str)
   (cond ((equal str " ")
