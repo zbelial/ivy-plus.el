@@ -55,6 +55,8 @@
         (set-window-buffer (selected-window) ivy-switch-buffer+-obuf)
         )
       )))
+
+;;;###autoload
 (defun ivy-switch-buffer+ ()
   "Switch to another buffer."
   (interactive)
@@ -104,6 +106,7 @@
     (imenu (cdr x))
     (recenter)))
 
+;;;###autoload
 (defun counsel-imenu+ ()
   "Jump to a buffer position indexed by imenu."
   (interactive)
@@ -165,6 +168,7 @@
           )
         ))))
 
+;;;###autoload
 (defun counsel-outline+ ()
   "Jump to an outline heading with completion."
   (interactive)
@@ -190,6 +194,28 @@
         )
       )))
 
+(defun counsel-rg+-remove-boundaries (text)
+  (when (string-prefix-p "\\_<" text)
+    (setq text (substring text 3))
+    )
+  (when (string-suffix-p "\\_>" text)
+    (setq text (substring text 0 (- (length text) 3)))
+    )
+  text
+  )
+
+;;;###autoload
+(defun counsel-rg+ (&optional initial-input initial-directory extra-rg-args rg-prompt)
+  "Search upwords in directory tree."
+  (interactive)
+  (let ((dir (file-name-directory (directory-file-name (or initial-directory default-directory))))
+        (text (or ivy-text initial-input))
+        )
+    (ivy-quit-and-run
+      (counsel-rg (counsel-rg+-remove-boundaries text) dir extra-rg-args rg-prompt)
+      )
+    )
+  )
 
 (defun ivy-regex-pyim (str)
   (let ((x (ivy--regex-plus str))
