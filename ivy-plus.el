@@ -206,7 +206,7 @@
 
 ;;;###autoload
 (defun counsel-rg+ (&optional initial-input initial-directory extra-rg-args rg-prompt)
-  "Search upwords in directory tree."
+  "Search upwards in the directory tree."
   (interactive)
   (let ((dir (file-name-directory (directory-file-name (or initial-directory default-directory))))
         (text (or ivy-text initial-input))
