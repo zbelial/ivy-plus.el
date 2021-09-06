@@ -204,13 +204,37 @@
   text
   )
 
+(defvar ivy-plus--swiper-flag 0)
+
+(defun swiper-before-set-flag (&optional initial-input)
+  (setq ivy-plus--swiper-flag 1)
+  )
+(add-hook #'swiper :before #'swiper-before-set-flag)
+
 ;;;###autoload
 (defun counsel-rg+ (&optional initial-input initial-directory extra-rg-args rg-prompt)
+  "Search upwards in the directory tree."
+  (interactive)
+  (let ((text (or ivy-text initial-input))
+        )
+    (ivy-quit-and-run
+      (counsel-rg (counsel-rg+-remove-boundaries text) initial-directory extra-rg-args rg-prompt)
+      )
+    )
+  )
+
+
+;;;###autoload
+(defun counsel-rg-upwards (&optional initial-input initial-directory extra-rg-args rg-prompt)
   "Search upwards in the directory tree."
   (interactive)
   (let ((dir (file-name-directory (directory-file-name (or initial-directory default-directory))))
         (text (or ivy-text initial-input))
         )
+    (when (= ivy-plus--swiper-flag 1)
+      (setq dir default-directory)
+      (setq ivy-plus--swiper-flag 0)
+      )
     (ivy-quit-and-run
       (counsel-rg (counsel-rg+-remove-boundaries text) dir extra-rg-args rg-prompt)
       )
