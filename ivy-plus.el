@@ -40,6 +40,7 @@
 (require 'counsel)
 (require 'pyim)
 (require 'pinyinlib)
+(require 'heap)
 
 (defgroup ivy-plus nil
   "New counsel commands or enhancement to some existing counsel commands."
@@ -57,7 +58,7 @@
       )))
 
 ;;;###autoload
-(defun ivy-switch-buffer+ ()
+(defun ivy-switch-buffer+ (&optional initial-input)
   "Switch to another buffer."
   (interactive)
   (setq ivy-switch-buffer+-obuf (current-buffer))
@@ -71,7 +72,9 @@
                               :action #'ivy--switch-buffer-action
                               :update-fn #'ivy-switch-buffer+-update-fn
                               :matcher #'ivy--switch-buffer-matcher
-                              :caller 'ivy-switch-buffer))
+                              :caller 'ivy-switch-buffer
+                              :initial-input initial-input
+                              ))
           )
       (unless res
         (switch-to-buffer ivy-switch-buffer+-obuf t)
@@ -238,6 +241,136 @@
     (ivy-quit-and-run
       (counsel-rg (counsel-rg+-remove-boundaries text) dir extra-rg-args rg-prompt)
       )
+    )
+  )
+
+(defcustom counsel-frequent-buffer-limit 10
+  "How many buffers displayed when switching."
+  :type 'integer
+  :group 'ivy)
+
+(defun counsel-frequent-buffer--compare (a b)
+  (let ((count-a (nth 1 a))
+        (count-b (nth 1 b)))
+    (> count-a count-b)
+    )
+  )
+;; (counsel-frequent-buffer--compare  (list "a" 1) (list "b" 3))
+
+(defvar counsel-frequent-buffer--frequency (make-heap #'counsel-frequent-buffer--compare))
+(defvar counsel-frequent-buffer--visited-count (make-hash-table :test #'equal))
+
+(defvar counsel-frequent-buffer--current nil)
+(defun counsel-frequent-buffer--match-function (record)
+  (let ((current-key (nth 2 counsel-frequent-buffer--current))
+        (heap-key (nth 2 record)))
+    (and current-key (string-equal current-key heap-key))
+    )
+  )
+
+(defun counsel-frequent-buffer--visit-buffer (&optional arg)
+  (let ((buffer (current-buffer))
+        (count 0)
+        bname
+        bfile-name
+        )
+    (unless (minibufferp buffer)
+      (setq bname (buffer-name buffer))
+      ;; (message "buffer-name %s" bname)
+      (setq bfile-name (or (buffer-file-name buffer) bname))
+      ;; (message "buffer-file-name %s" bfile-name)
+
+      (setq count (1+ (gethash bfile-name counsel-frequent-buffer--visited-count 0)))
+
+      (puthash bfile-name count counsel-frequent-buffer--visited-count)
+
+      (setq counsel-frequent-buffer--current (list bname count bfile-name))
+
+      (when (not (heap-modify counsel-frequent-buffer--frequency #'counsel-frequent-buffer--match-function counsel-frequent-buffer--current))
+        (heap-add counsel-frequent-buffer--frequency counsel-frequent-buffer--current)
+        )
+      )
+    )
+  )
+
+(defun counsel-frequent-buffer--kill-buffer (&optional arg)
+  (let ((buffer (current-buffer))
+        (count 0)
+        bname
+        bfile-name
+        )
+    (setq bname (buffer-name buffer))
+    (setq bfile-name (or (buffer-file-name buffer) bname))
+
+    (remhash bfile-name counsel-frequent-buffer--visited-count)
+
+    (setq counsel-frequent-buffer--current (list bname count bfile-name))
+
+    (heap-modify counsel-frequent-buffer--frequency #'counsel-frequent-buffer--match-function counsel-frequent-buffer--current)
+    )
+  )
+
+(add-hook 'window-buffer-change-functions #'counsel-frequent-buffer--visit-buffer)
+;; (remove-hook 'window-buffer-change-functions #'counsel-frequent-buffer--visit-buffer)
+
+(add-hook 'kill-buffer-hook #'counsel-frequent-buffer--kill-buffer)
+;; (remove-hook 'kill-buffer-hook #'counsel-frequent-buffer--kill-buffer)
+
+
+(defvar counsel-frequent-buffer-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "C-s") 'counsel-frequent-buffer-fallback)
+    map)
+  "Keymap for `counsel-frequent-buffer'.")
+;; (define-key counsel-frequent-buffer-map (kbd "C-s") 'counsel-frequent-buffer-fallback)
+
+;;;###autoload
+(defun counsel-frequent-buffer-fallback ()
+  (interactive)
+  (let ((text (or ivy-text initial-input))
+        )
+    (ivy-quit-and-run
+      (ivy-switch-buffer+ text)
+      )
+    )  
+  )
+
+;;;###autoload
+(defun counsel-frequent-buffer ()
+  "Switch to frequently visited buffers."
+  (interactive)
+  (let ((iter (heap-iter counsel-frequent-buffer--frequency))
+        (total-count (heap-size counsel-frequent-buffer--frequency))
+        (buffers nil)
+        (count 0)
+        res
+        record
+        )
+    (while (and (< count counsel-frequent-buffer-limit)
+                (< count total-count)
+                )
+      (setq record (iter-next iter))
+      ;; (message "record %S" record)
+
+      (when (> (nth 1 record) 0)
+        (setq buffers (cl-pushnew record buffers))
+        )
+
+      (setq count (1+ count))
+      )
+
+    (setq buffers (mapcar (lambda (r) (cons (nth 2 r) r)) (nreverse buffers)))
+
+    (setq res (ivy-read "Frequent Visited: " buffers
+                        :action '(1
+                                  ("v" (lambda (s)
+                                         (switch-to-buffer (nth 0 (cdr s)))
+                                         ))
+                                  )
+                        :keymap counsel-frequent-buffer-map
+                        :caller #'counsel-frequent-buffer
+                        )
+          )
     )
   )
 
