@@ -313,6 +313,9 @@
 (add-hook 'window-buffer-change-functions #'counsel-frequent-buffer--visit-buffer)
 ;; (remove-hook 'window-buffer-change-functions #'counsel-frequent-buffer--visit-buffer)
 
+(add-hook 'find-file-hook #'counsel-frequent-buffer--visit-buffer)
+;; (remove-hook 'find-file-hook #'counsel-frequent-buffer--visit-buffer)
+
 (add-hook 'kill-buffer-hook #'counsel-frequent-buffer--kill-buffer)
 ;; (remove-hook 'kill-buffer-hook #'counsel-frequent-buffer--kill-buffer)
 
