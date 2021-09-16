@@ -336,12 +336,15 @@
            item
            buffer
            )
-      (setq item (nth (get-text-property 0 'idx current) (ivy-state-collection ivy-last)))
-      (setq buffer (nth 0 (cdr item)))
-      (if (get-buffer buffer)
-          (set-window-buffer (selected-window) buffer)
-        (set-window-buffer (selected-window) counsel-frequent-buffer-obuf)
-        ))))
+      (when (not (string-empty-p current))
+        (setq item (nth (get-text-property 0 'idx current) (ivy-state-collection ivy-last)))
+        (setq buffer (nth 0 (cdr item)))
+        (if (get-buffer buffer)
+            (set-window-buffer (selected-window) buffer)
+          (set-window-buffer (selected-window) counsel-frequent-buffer-obuf)
+          )))
+    )
+  )
 
 ;;;###autoload
 (defun counsel-frequent-buffer ()
