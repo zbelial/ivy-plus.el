@@ -93,7 +93,6 @@
           item
           marker
           )
-      ;; (message "current %S" current)
       (when (not (string-empty-p current))
         (setq item (nth (get-text-property 0 'idx current) (ivy-state-collection ivy-last)))
         (setq marker (cddr item))
@@ -131,7 +130,6 @@
             (setq min (- current-pos marker-pos))
             (setq preselect idx)))))
     
-    ;; (message "preselect %d" preselect)
     (unwind-protect
         (and 
          (setq res (ivy-read "imenu items: " items
@@ -158,12 +156,9 @@
           item
           marker
           )
-      ;; (message "current %S" current)
       (when (not (string-empty-p current))
         (setq item (nth (get-text-property 0 'idx current) (ivy-state-collection ivy-last)))
-        ;; (message "item %S" item)
         (setq marker (cdr item))
-        ;; (message "marker %S" marker)
         (goto-char marker)
         (recenter)
         (let ((pulse-delay 0.75))
@@ -276,9 +271,7 @@
         )
     (unless (minibufferp buffer)
       (setq bname (buffer-name buffer))
-      ;; (message "buffer-name %s" bname)
       (setq bfile-name (or (buffer-file-name buffer) bname))
-      ;; (message "buffer-file-name %s" bfile-name)
 
       (setq count (1+ (gethash bfile-name counsel-frequent-buffer--visited-count 0)))
 
@@ -334,14 +327,28 @@
         )
     (ivy-quit-and-run
       (ivy-switch-buffer+ text)
-      )
-    )  
-  )
+      )))
+
+(defvar counsel-frequent-buffer-obuf nil)
+(defun counsel-frequent-buffer-update-fn ()
+  (with-ivy-window
+    (let* ((current (ivy-state-current ivy-last))
+           item
+           buffer
+           )
+      (setq item (nth (get-text-property 0 'idx current) (ivy-state-collection ivy-last)))
+      (setq buffer (nth 0 (cdr item)))
+      (if (get-buffer buffer)
+          (set-window-buffer (selected-window) buffer)
+        (set-window-buffer (selected-window) counsel-frequent-buffer-obuf)
+        ))))
 
 ;;;###autoload
 (defun counsel-frequent-buffer ()
   "Switch to frequently visited buffers."
   (interactive)
+  (setq counsel-frequent-buffer-obuf (current-buffer))
+  
   (let ((iter (heap-iter counsel-frequent-buffer--frequency))
         (total-count (heap-size counsel-frequent-buffer--frequency))
         (buffers nil)
@@ -353,29 +360,33 @@
                 (< count total-count)
                 )
       (setq record (iter-next iter))
-      ;; (message "record %S" record)
-
       (when (> (nth 1 record) 0)
         (setq buffers (cl-pushnew record buffers))
         )
 
       (setq count (1+ count))
       )
-
     (setq buffers (mapcar (lambda (r) (cons (nth 2 r) r)) (nreverse buffers)))
 
-    (setq res (ivy-read "Frequent Visited: " buffers
-                        :action '(1
-                                  ("v" (lambda (s)
-                                         (switch-to-buffer (nth 0 (cdr s)))
-                                         ))
-                                  )
-                        :keymap counsel-frequent-buffer-map
-                        :caller #'counsel-frequent-buffer
-                        )
+    (let (res)
+      (unwind-protect
+          (setq res (ivy-read "Frequent Visited: " buffers
+                              :action '(1
+                                        ("v" (lambda (s)
+                                               (switch-to-buffer (nth 0 (cdr s)))
+                                               ))
+                                        )
+                              :keymap counsel-frequent-buffer-map
+                              :update-fn #'counsel-frequent-buffer-update-fn
+                              :caller #'counsel-frequent-buffer
+                              )
+                )          
+        (unless res
+          (switch-to-buffer counsel-frequent-buffer-obuf t)
+          (setq counsel-frequent-buffer-obuf nil)
           )
-    )
-  )
+        )
+      )))
 
 (defun ivy-regex-pyim (str)
   (let ((x (ivy--regex-plus str))
