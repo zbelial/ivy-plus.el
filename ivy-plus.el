@@ -330,19 +330,32 @@
       )))
 
 (defvar counsel-frequent-buffer-obuf nil)
+(defvar counsel-frequent-buffer-tmp-selected-buf nil)
 (defun counsel-frequent-buffer-update-fn ()
+  ;; (message "counsel-frequent-buffer-update-fn %d" (time-convert nil 'integer))
   (with-ivy-window
     (let* ((current (ivy-state-current ivy-last))
            item
            buffer
            )
-      (when (not (string-empty-p current))
-        (setq item (nth (get-text-property 0 'idx current) (ivy-state-collection ivy-last)))
-        (setq buffer (nth 0 (cdr item)))
-        (if (get-buffer buffer)
-            (set-window-buffer (selected-window) buffer)
-          (set-window-buffer (selected-window) counsel-frequent-buffer-obuf)
-          )))
+      ;; (message "current %s" current)
+      (if (not (string-empty-p current))
+          (progn
+            (setq item (nth (get-text-property 0 'idx current) (ivy-state-collection ivy-last)))
+            (setq buffer (nth 0 (cdr item)))
+            (when (or (null counsel-frequent-buffer-tmp-selected-buf)
+                      (and
+                       buffer
+                       (not (eq buffer counsel-frequent-buffer-tmp-selected-buf))))
+              (setq counsel-frequent-buffer-tmp-selected-buf buffer)
+              (if (get-buffer buffer)
+                  (set-window-buffer (selected-window) buffer)
+                (set-window-buffer (selected-window) counsel-frequent-buffer-obuf)
+                )))
+        ;; 不匹配当前列表时，自动fallback到完整的列表
+        (counsel-frequent-buffer-fallback)
+        )
+      )
     )
   )
 
