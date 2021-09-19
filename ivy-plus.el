@@ -265,7 +265,11 @@
 
 (defun counsel-frequent-buffer--visit-buffer (&optional arg)
   (let ((buffer (current-buffer))
+        (visit-count 0)
         (count 0)
+        (iter (heap-iter counsel-frequent-buffer--frequency))
+        (total-count (heap-size counsel-frequent-buffer--frequency))
+        least-record record
         bname
         bfile-name
         )
@@ -273,11 +277,28 @@
       (setq bname (buffer-name buffer))
       (setq bfile-name (or (buffer-file-name buffer) bname))
 
-      (setq count (1+ (gethash bfile-name counsel-frequent-buffer--visited-count 0)))
+      (setq visit-count (1+ (gethash bfile-name counsel-frequent-buffer--visited-count 0)))
 
-      (puthash bfile-name count counsel-frequent-buffer--visited-count)
+      (while (and (< count counsel-frequent-buffer-limit)
+                  (< count total-count)
+                  )
+        (setq record (iter-next iter))
+        (when (> (nth 1 record) 0)
+          (setq least-record record)
+          )
 
-      (setq counsel-frequent-buffer--current (list bname count bfile-name))
+        (setq count (1+ count))
+        )
+      ;; 最近访问的buffer后续还有可能会被访问，所以提升其count到比limit范围内访问数最少的buffer的count还要大。
+      (when least-record
+        (when (< visit-count (nth 1 least-record))
+          (setq visit-count (1+ (nth 1 least-record)))
+          )
+        )
+
+      (puthash bfile-name visit-count counsel-frequent-buffer--visited-count)
+
+      (setq counsel-frequent-buffer--current (list bname visit-count bfile-name))
 
       (when (not (heap-modify counsel-frequent-buffer--frequency #'counsel-frequent-buffer--match-function counsel-frequent-buffer--current))
         (heap-add counsel-frequent-buffer--frequency counsel-frequent-buffer--current)
@@ -318,7 +339,6 @@
     (define-key map (kbd "C-s") 'counsel-frequent-buffer-fallback)
     map)
   "Keymap for `counsel-frequent-buffer'.")
-;; (define-key counsel-frequent-buffer-map (kbd "C-s") 'counsel-frequent-buffer-fallback)
 
 ;;;###autoload
 (defun counsel-frequent-buffer-fallback ()
