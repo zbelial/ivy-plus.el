@@ -357,6 +357,7 @@
     (let* ((current (ivy-state-current ivy-last))
            item
            buffer
+           (sitted nil)
            )
       ;; (message "current %s" current)
       (if (not (string-empty-p current))
@@ -372,7 +373,10 @@
                   (set-window-buffer (selected-window) buffer)
                 (set-window-buffer (selected-window) counsel-frequent-buffer-obuf)
                 )))
-        ;; 不匹配当前列表时，自动fallback到完整的列表
+        ;; 不匹配当前列表时，自动fallback到完整的列表(当前不再继续输入)
+        ;; FIXME 输入太快的话可能会hang
+        (while (input-pending-p)
+          )
         (counsel-frequent-buffer-fallback)
         )
       )
@@ -423,6 +427,30 @@
           )
         )
       )))
+
+(defun counsel-flymake--formatter (diag)
+  (let (msg
+        beg end type text
+        )
+    (setq msg (format "%8s"))
+    )
+  )
+
+;;;###autoload
+(defun counsel-flymake ()
+  ""
+  (interactive)
+  (let ((diagnostics (flymake-diagnostics))
+        )
+    (dolist (d diagnostics)
+      ;; (message "type %s, DIAGNOSTIC %S" (type-of d) d)
+      (message "begin %S" (flymake--diag-beg d))
+      (message "end %S" (flymake--diag-end d))
+      (message "text %s" (flymake--diag-text d))
+      (message "type %S" (flymake--diag-type d))
+      )
+    )
+  )
 
 (defun ivy-regex-pyim (str)
   (let ((x (ivy--regex-plus str))
