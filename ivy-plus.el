@@ -41,6 +41,7 @@
 (require 'pyim)
 (require 'pinyinlib)
 (require 'heap)
+(require 'flymake)
 
 (defgroup ivy-plus nil
   "New counsel commands or enhancement to some existing counsel commands."
@@ -98,7 +99,7 @@
         (setq marker (cddr item))
         (goto-char marker)
         (recenter)
-        (let ((pulse-delay 0.75))
+        (let ((pulse-delay 0.05))
           (pulse-momentary-highlight-one-line (point))
           )
         )
@@ -161,7 +162,7 @@
         (setq marker (cdr item))
         (goto-char marker)
         (recenter)
-        (let ((pulse-delay 0.75))
+        (let ((pulse-delay 0.05))
           (pulse-momentary-highlight-one-line (point))
           )
         ))))
@@ -374,9 +375,9 @@
                 (set-window-buffer (selected-window) counsel-frequent-buffer-obuf)
                 )))
         ;; 不匹配当前列表时，自动fallback到完整的列表(当前不再继续输入)
-        ;; FIXME 输入太快的话可能会hang
-        (while (input-pending-p)
-          )
+        ;; ;; FIXME 输入太快的话可能会hang
+        ;; (while (input-pending-p)
+        ;;   )
         (counsel-frequent-buffer-fallback)
         )
       )
@@ -428,26 +429,96 @@
         )
       )))
 
-(defun counsel-flymake--formatter (diag)
-  (let (msg
-        beg end type text
+(defun counsel-flymake--format-type (type)
+  (let (face
+        display-type
+        (type (symbol-name type))
         )
-    (setq msg (format "%8s"))
+    (cond
+     ((string-suffix-p "note" type)
+      (setq display-type "note")
+      (setq face 'success)
+      )
+     ((string-suffix-p "warning" type)
+      (setq display-type "warning")
+      (setq face 'warning)
+      )
+     ((string-suffix-p "error" type)
+      (setq display-type "error")
+      (setq face 'error)
+      )
+     (t
+      (setq display-type "note")
+      (setq face 'warning)
+      )
+     )
+    (propertize (format "%s" display-type) 'face face)
     )
   )
 
+(defun counsel-flymake--formatter (diag)
+  (let* (msg
+         (beg (flymake--diag-beg diag))
+         (end (flymake--diag-end diag))
+         (type (flymake--diag-type diag))
+         (text (flymake--diag-text diag))
+         (line (line-number-at-pos beg))
+         )
+    (setq msg (format "%-8d  %-12s    %s" line (counsel-flymake--format-type type) text))
+    (cons msg (list :line line :type type :text text :beg beg :end end))
+    )
+  )
+
+
+(defun counsel-flymake--update-fn ()
+  (with-ivy-window
+    (let ((current (ivy-state-current ivy-last))
+          item
+          pos
+          )
+      (when (not (string-empty-p current))
+        (setq item (nth (get-text-property 0 'idx current) (ivy-state-collection ivy-last)))
+        (setq pos (plist-get (cdr item) :beg))
+        (goto-char pos)
+        (recenter)
+        (let ((pulse-delay 0.05))
+          (pulse-momentary-highlight-one-line (point))
+          )
+        )
+      ))
+  )
+
+(defvar counsel-flymake--opoint nil)
 ;;;###autoload
 (defun counsel-flymake ()
   ""
   (interactive)
+  (setq counsel-flymake--opoint (point))
+
   (let ((diagnostics (flymake-diagnostics))
+        records
+        res
         )
-    (dolist (d diagnostics)
-      ;; (message "type %s, DIAGNOSTIC %S" (type-of d) d)
-      (message "begin %S" (flymake--diag-beg d))
-      (message "end %S" (flymake--diag-end d))
-      (message "text %s" (flymake--diag-text d))
-      (message "type %S" (flymake--diag-type d))
+    (setq records (mapcar #'counsel-flymake--formatter diagnostics))
+    (unwind-protect
+        (setq res (ivy-read "Diagnostics: " records
+                            :action '(1
+                                      ("v" (lambda (record)
+                                             (let ((diag (cdr record)))
+                                               (goto-char (plist-get diag :beg))
+                                               (recenter)
+                                               (let ((pulse-delay 0.05))
+                                                 (pulse-momentary-highlight-one-line (point))
+                                                 )
+                                               )
+                                             )
+                                       )
+                                      )
+                            :update-fn #'counsel-flymake--update-fn)
+              )
+      (unless res
+        (goto-char counsel-flymake--opoint)
+        (setq counsel-flymake--opoint nil))
       )
     )
   )
