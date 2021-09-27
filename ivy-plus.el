@@ -171,6 +171,12 @@
           )
         ))))
 
+(defun counsel-outline+-action (x)
+  "Go to outline X."
+  (goto-char (cdr x))
+  (recenter)
+  )
+
 ;;;###autoload
 (defun counsel-outline+ ()
   "Jump to an outline heading with completion."
@@ -183,7 +189,7 @@
         (and
          (setq res (ivy-read "Outline: " (counsel-outline-candidates settings)
                              :action (or (plist-get settings :action)
-                                         #'counsel-outline-action)
+                                         #'counsel-outline+-action)
                              :history (or (plist-get settings :history)
                                           'counsel-outline-history)
                              :preselect (max (1- counsel-outline--preselect) 0)
