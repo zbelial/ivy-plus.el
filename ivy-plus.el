@@ -92,25 +92,11 @@
   (with-ivy-window
     (let ((current (ivy-state-current ivy-last))
           item
-          semantic-tag
           pos
           )
       (when (not (string-empty-p current))
-        (cond
-         ((semantic-active-p)
-          )
-         )
-        (if (semantic-active-p)
-            (progn
-              (setq item (nth (get-text-property 0 'idx current) (ivy-state-collection ivy-last)))
-              (setq semantic-tag (cdr item))
-              (setq pos (semantic-tag-start semantic-tag))
-              )
-          (progn
-            (setq item (nth (get-text-property 0 'idx current) (ivy-state-collection ivy-last)))
-            (setq pos (cddr item))
-            )
-          )
+        (setq item (nth (get-text-property 0 'idx current) (ivy-state-collection ivy-last)))
+        (setq pos (cddr item))
         (goto-char pos)
         (recenter)
         (let ((pulse-delay 0.05))
@@ -121,10 +107,7 @@
 
 (defun counsel-imenu+-action (x)
   (with-ivy-window
-    (if (semantic-active-p)
-        (goto-char (semantic-tag-start (cdr x)))
-      (imenu (cdr x))
-      )
+    (imenu (cdr x))
     (recenter)
     ))
 
@@ -134,45 +117,23 @@
   (interactive)
   (setq counsel-imenu+-opoint (point))
 
-  (let ((items (counsel--imenu-candidates))
-        (preselect 0)
-        (current-pos (point))
-        (idx -1)
-        (min (buffer-size))
-        pos
-        res)
-    (if (semantic-active-p)
-        (setq items (mapcar
-                     (lambda (x)
-                       (cons
-                        (counsel-semantic-format-tag x)
-                        x))
-                     (counsel-semantic-tags)))
-      (setq items (counsel--imenu-candidates))
-      )
-    (if (semantic-active-p)
-        (progn
-          (dolist (item items)
-            (setq idx (1+ idx))
-            (let ((semantic-tag (cdr item))
-                  )
-              (setq pos (semantic-tag-start semantic-tag))
-              (when (and (<= pos current-pos) (< (- current-pos pos) min))
-                (setq min (- current-pos pos))
-                (setq preselect idx))
-              )
+  (let* ((imenu-create-index-function #'imenu-default-create-index-function)
+         (items (counsel--imenu-candidates))
+         (preselect 0)
+         (current-pos (point))
+         (idx -1)
+         (min (buffer-size))
+         pos
+         res)
+    (dolist (item items)
+      (setq idx (1+ idx))
+      (let ((marker (cddr item))
             )
-          )
-      (dolist (item items)
-        (setq idx (1+ idx))
-        (let ((marker (cddr item))
-              )
-          (when marker
-            (setq pos (marker-position marker))
-            (when (and (<= pos current-pos) (< (- current-pos pos) min))
-              (setq min (- current-pos pos))
-              (setq preselect idx)))))
-      )
+        (when marker
+          (setq pos (marker-position marker))
+          (when (and (<= pos current-pos) (< (- current-pos pos) min))
+            (setq min (- current-pos pos))
+            (setq preselect idx)))))
 
     (unwind-protect
         (and 
