@@ -42,6 +42,7 @@
 (require 'pinyinlib)
 (require 'heap)
 (require 'flymake)
+(require 'cl-lib)
 
 (defgroup ivy-plus nil
   "New counsel commands or enhancement to some existing counsel commands."
@@ -255,32 +256,34 @@
   :type 'integer
   :group 'ivy)
 
+(cl-defstruct buf-freq "记录buffer访问次数"
+              bname count bfile-name)
+
 (defun counsel-frequent-buffer--compare (a b)
-  (let ((count-a (nth 1 a))
-        (count-b (nth 1 b)))
+  (let ((count-a (buf-freq-count a))
+        (count-b (buf-freq-count b)))
     (> count-a count-b)
     )
   )
 ;; (counsel-frequent-buffer--compare  (list "a" 1) (list "b" 3))
 
-(defvar counsel-frequent-buffer--frequency (make-heap #'counsel-frequent-buffer--compare))
+(defvar counsel-frequent-buffer--frequency (make-heap #'counsel-frequent-buffer--compare)
 (defvar counsel-frequent-buffer--visited-count (make-hash-table :test #'equal))
 
 (defvar counsel-frequent-buffer--current nil)
 (defun counsel-frequent-buffer--match-function (record)
-  (let ((current-key (nth 2 counsel-frequent-buffer--current))
-        (heap-key (nth 2 record)))
+  (let ((current-key (buf-freq-bfile-name counsel-frequent-buffer--current))
+        (heap-key (buf-freq-bfile-name record)))
     (and current-key (string-equal current-key heap-key))
     )
   )
 
 (defun counsel-frequent-buffer--visit-buffer (&optional arg)
   (let ((buffer (current-buffer))
-        (visit-count 0)
         (count 0)
         (iter (heap-iter counsel-frequent-buffer--frequency))
         (total-count (heap-size counsel-frequent-buffer--frequency))
-        least-record record
+        root
         bname
         bfile-name
         )
@@ -288,28 +291,17 @@
       (setq bname (buffer-name buffer))
       (setq bfile-name (or (buffer-file-name buffer) bname))
 
-      (setq visit-count (1+ (gethash bfile-name counsel-frequent-buffer--visited-count 0)))
+      (setq count (1+ (gethash bfile-name counsel-frequent-buffer--visited-count 0)))
 
-      (while (and (< count counsel-frequent-buffer-limit)
-                  (< count total-count)
-                  )
-        (setq record (iter-next iter))
-        (when (> (nth 1 record) 0)
-          (setq least-record record)
-          )
-
-        (setq count (1+ count))
-        )
-      ;; 最近访问的buffer后续还有可能会被访问，所以提升其count到比limit范围内访问数最少的buffer的count还要大。
-      (when least-record
-        (when (< visit-count (nth 1 least-record))
-          (setq visit-count (1+ (nth 1 least-record)))
-          )
+      ;; 最近访问的buffer后续还有可能会被访问，所以提升其count到比访问数最大的buffer(非自身的话)的count小1点。
+      (setq root (heap-root counsel-frequent-buffer--frequency))
+      (when root
+        (setq count (1+ (buf-freq-count root)))
         )
 
-      (puthash bfile-name visit-count counsel-frequent-buffer--visited-count)
+      (puthash bfile-name count counsel-frequent-buffer--visited-count)
 
-      (setq counsel-frequent-buffer--current (list bname visit-count bfile-name))
+      (setq counsel-frequent-buffer--current (make-buf-freq :bname bname :count count :bfile-name bfile-name))
 
       (when (not (heap-modify counsel-frequent-buffer--frequency #'counsel-frequent-buffer--match-function counsel-frequent-buffer--current))
         (heap-add counsel-frequent-buffer--frequency counsel-frequent-buffer--current)
@@ -329,7 +321,7 @@
 
     (remhash bfile-name counsel-frequent-buffer--visited-count)
 
-    (setq counsel-frequent-buffer--current (list bname count bfile-name))
+    (setq counsel-frequent-buffer--current (make-buf-freq :bname bname :count count :bfile-name bfile-name))
 
     (heap-modify counsel-frequent-buffer--frequency #'counsel-frequent-buffer--match-function counsel-frequent-buffer--current)
     )
@@ -374,7 +366,7 @@
       (if (not (string-empty-p current))
           (progn
             (setq item (nth (get-text-property 0 'idx current) (ivy-state-collection ivy-last)))
-            (setq buffer (nth 0 (cdr item)))
+            (setq buffer (buf-freq-bname (cdr item)))
             (when (or (null counsel-frequent-buffer-tmp-selected-buf)
                       (and
                        buffer
@@ -394,6 +386,24 @@
     )
   )
 
+(defun counsel-frequent-buffer-action (s)
+  (let ((bname (buf-freq-bname (cdr s)))
+        (bfile-name (buf-freq-bfile-name (cdr s)))
+        )
+    (if (bufferp bname)
+        (switch-to-buffer bname)
+      (cl-dolist (b (buffer-list))
+        (with-current-buffer b
+          (when (and (buffer-file-name b)
+                     (string-equal (buffer-file-name b) bfile-name))
+            (setq bname b)
+            (cl-return nil)
+            ))
+        )
+      (switch-to-buffer bname)
+      )
+    )
+  )
 ;;;###autoload
 (defun counsel-frequent-buffer ()
   "Switch to frequently visited buffers."
@@ -404,29 +414,29 @@
         (total-count (heap-size counsel-frequent-buffer--frequency))
         (buffers nil)
         (count 0)
-        res
+        (cand-count 0)
         record
         )
-    (while (and (< count counsel-frequent-buffer-limit)
+    (while (and (< cand-count counsel-frequent-buffer-limit)
                 (< count total-count)
                 )
       (setq record (iter-next iter))
-      (when (> (nth 1 record) 0)
+      (when (> (buf-freq-count record) 0)
         (setq buffers (cl-pushnew record buffers))
+        (setq cand-count (1+ cand-count))
         )
 
       (setq count (1+ count))
       )
-    (setq buffers (mapcar (lambda (r) (cons (nth 2 r) r)) (nreverse buffers)))
+    (iter-close iter)
+
+    (setq buffers (mapcar (lambda (r) (cons (buf-freq-bfile-name r) r)) (nreverse buffers)))
 
     (let (res)
       (unwind-protect
           (setq res (ivy-read "Frequent Visited: " buffers
-                              :action '(1
-                                        ("v" (lambda (s)
-                                               (switch-to-buffer (nth 0 (cdr s)))
-                                               ))
-                                        )
+                              :action #'counsel-frequent-buffer-action
+                              :preselect 1
                               :keymap counsel-frequent-buffer-map
                               :update-fn #'counsel-frequent-buffer-update-fn
                               :caller #'counsel-frequent-buffer
