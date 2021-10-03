@@ -430,7 +430,7 @@
       )
     (iter-close iter)
 
-    (setq buffers (mapcar (lambda (r) (cons (buf-freq-bfile-name r) r)) (nreverse buffers)))
+    (setq buffers (mapcar (lambda (r) (cons (format "  %-48s    %s" (buf-freq-bname r) (buf-freq-bfile-name r)) r)) (nreverse buffers)))
 
     (let (res)
       (unwind-protect
