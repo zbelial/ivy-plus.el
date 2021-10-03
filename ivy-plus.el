@@ -41,12 +41,61 @@
 (require 'pyim)
 (require 'pinyinlib)
 (require 'heap)
+(require 'dash)
 (require 'flymake)
 (require 'cl-lib)
+(eval-when-compile
+  (require 'cl-macs)
+  )
 
 (defgroup ivy-plus nil
   "New counsel commands or enhancement to some existing counsel commands."
   :prefix "ivy-plus-" :group 'ivy)
+
+(defun ivy-regex-pyim (str)
+  (let ((x (ivy--regex-plus str))
+	(case-fold-search nil))
+    (if (listp x)
+        (mapcar (lambda (y)
+		  (if (cdr y)
+		      (list (if (equal (car y) "")
+			        ""
+			      (pyim-cregexp-build (car y)))
+			    (cdr y))
+		    (list (pyim-cregexp-build (car y)))))
+	        x)
+      (pyim-cregexp-build x))))
+
+(defun ivy--pinyinlib-build-regexp-string (str)
+  (progn
+    (cond ((equal str ".*")
+	   ".*")
+	  (t
+	   (pinyinlib-build-regexp-string str t)))))
+
+(defun ivy--pinyin-regexp-helper (str)
+  (cond ((equal str " ")
+	 ".*")
+	((equal str "")
+	 nil)
+	(t
+	 str)))
+
+(defun ivy--pinyin-to-utf8 (str)
+  (cond ((equal 0 (length str))
+	 nil)
+	(t
+	 (mapconcat 'ivy--pinyinlib-build-regexp-string
+		    (remove nil (mapcar 'ivy--pinyin-regexp-helper (split-string str "")))
+		    ""))
+	nil))
+
+(defun ivy-regex-pinyinlib (str)
+  (or (ivy--pinyin-to-utf8 str)
+      (ivy--regex-plus str)
+      (ivy--regex-ignore-order str)
+      ))
+
 
 (defvar ivy-switch-buffer+-obuf nil)
 (defun ivy-switch-buffer+-update-fn ()
@@ -543,48 +592,144 @@
     )
   )
 
-(defun ivy-regex-pyim (str)
-  (let ((x (ivy--regex-plus str))
-	(case-fold-search nil))
-    (if (listp x)
-        (mapcar (lambda (y)
-		  (if (cdr y)
-		      (list (if (equal (car y) "")
-			        ""
-			      (pyim-cregexp-build (car y)))
-			    (cdr y))
-		    (list (pyim-cregexp-build (car y)))))
-	        x)
-      (pyim-cregexp-build x))))
 
-(defun ivy--pinyinlib-build-regexp-string (str)
-  (progn
-    (cond ((equal str ".*")
-	   ".*")
-	  (t
-	   (pinyinlib-build-regexp-string str t)))))
+(defcustom counsel-el-definition-macro-names
+  '(defun defun* cl-defun defmacro defmacro* cl-defmacro defcustom
+          defvar defvar-local defconst defsubst defsubst* cl-defsubst)
+  "Lists the function, macro and variable definition forms in Elisp.
+Used when searching for usages across the whole buffer."
+  :group 'ivy)
 
-(defun ivy--pinyin-regexp-helper (str)
-  (cond ((equal str " ")
-	 ".*")
-	((equal str "")
-	 nil)
-	(t
-	 str)))
+(cl-defstruct counsel-el-ref file line col identifier type form)
 
-(defun ivy--pinyin-to-utf8 (str)
-  (cond ((equal 0 (length str))
-	 nil)
-	(t
-	 (mapconcat 'ivy--pinyinlib-build-regexp-string
-		    (remove nil (mapcar 'ivy--pinyin-regexp-helper (split-string str "")))
-		    ""))
-	nil))
+(defun counsel--beginning-of-defun ()
+  "A safe version of `beginning-of-defun'.
+Attempts to find an enclosing defun form first, rather than
+relying on indentation."
+  (or
+   ;; Search for known defun form enclosing point.
+   (cl-loop
+    while (ignore-errors (backward-up-list) t)
+    do (when (thing-at-point-looking-at
+              (rx-to-string `(seq "(" (or ,@(-map 'symbol-name counsel-el-definition-macro-names)))))
+         (cl-return (point))))
+   ;; Fall back to using indentation.
+   (ignore-errors
+     (beginning-of-thing 'defun))))
 
-(defun ivy-regex-pinyinlib (str)
-  (or (ivy--pinyin-to-utf8 str)
-      (ivy--regex-plus str)
-      (ivy--regex-ignore-order str)
-      ))
+(defun counsel--line-str ()
+  "Return the contents of the current line."
+  (buffer-substring (line-beginning-position)
+                    (line-end-position)))
+
+(cl-defun counsel--line-matches? (regex &optional (point (point)))
+  "Non-nil if POINT is on a line that matches REGEX."
+  (save-excursion
+    (goto-char point)
+    (s-matches? regex (counsel--line-str))))
+
+(defun counsel--autoload-directive-exsts-above-defun? ()
+  "Non-nil if the current defun is preceeded by an autoload directive."
+  (save-excursion
+    (counsel--beginning-of-defun)
+    (forward-line -1)
+    (counsel--line-matches? (rx bol (* space) ";;;###autoload" (* space) eol))))
+
+(defun counsel--looking-at-string? ()
+  "Return non-nil if point is inside a string."
+  (save-excursion (nth 3 (syntax-ppss))))
+
+(defun counsel--looking-at-comment? (&optional pos)
+  "Non-nil if POS is on a comment."
+  (save-excursion
+    (nth 4 (syntax-ppss pos))))
+
+(defun counsel--interactive-form-p (form)
+  "Does FORM contain an (interactive) expression?"
+  ;; (defun foo () x y ...) -> (x y ...)
+  (let ((body (-drop 3 form)))
+    ;; Ignore docstring, if present.
+    (when (stringp (car body))
+      (setq body (-drop 1 body)))
+
+    (eq (car-safe (car body))
+        'interactive)))
+
+(defun counsel--def-name (definition-form)
+  "Given a DEFINITION-FORM such as defvar/defun/..., return its name."
+  (let* ((form-name (nth 1 definition-form)))
+    (when (symbolp form-name)
+      form-name)))
+
+(defun counsel--def-find-usages (definition-form)
+  "Find the usages for a given DEFINITION-FORM symbol.
+
+Returns a list of conses, where the car is the line number and
+the cdr is the usage form."
+  (-when-let (sym (counsel--def-name definition-form))
+    ;; Search the buffer for usages of `sym'. Remove the definition form
+    ;; from the results.
+    (let (acc)
+      (save-excursion
+        (goto-char (point-min))
+        (while (search-forward-regexp
+                (rx-to-string `(seq symbol-start ,(symbol-name sym) symbol-end))
+                nil t)
+          (-when-let (form (list-at-point))
+            (unless (equal definition-form form)
+              ;; Add this usage to `acc', unless it is the original definition.
+              (push (cons (line-number-at-pos) form) acc)))))
+      (nreverse acc))))
+
+
+(defun counsel--find-unused-defs (&optional buffer)
+  "Return a list of all unused definitions in the buffer.
+The result is a list of `counsel-el-ref'."
+  (let ((buffer (or buffer (current-buffer))))
+    (with-current-buffer buffer
+      (save-excursion
+        (let (acc)
+          (goto-char (point-min))
+
+          ;; Find definitions in this buffer.
+          ;;
+          ;; This will search the buffer for known defun forms. As a special
+          ;; cases, forms with a preceding autoload directive are ignored.
+          (while (search-forward-regexp
+                  (rx-to-string `(seq "(" (or ,@(-map 'symbol-name counsel-el-definition-macro-names))
+                                      symbol-end))
+                  nil t)
+            (unless (or (counsel--looking-at-string?)
+                        (counsel--looking-at-comment?)
+                        (counsel--autoload-directive-exsts-above-defun?))
+              ;; Collect definitions that do not have usages.
+              (-when-let* ((form (list-at-point))
+                           (col  (save-excursion
+                                   (counsel--beginning-of-defun)
+                                   (current-column))))
+                (unless (or
+                         ;; Consider interactive forms to be used.
+                         (counsel--interactive-form-p form)
+                         (counsel--def-find-usages form))
+                  (push
+                   (make-counsel-el-ref :file (buffer-file-name)
+                                        :line (line-number-at-pos)
+                                        :col  col
+                                        :type (car form)
+                                        :identifier (nth 1 form)
+                                        :form form)
+                   acc)))))
+          (nreverse acc))))
+    )
+  )
+
+;;;###autoload
+(defun counsel-unused-definitions ()
+  (interactive)
+  (let ((unused (counsel--find-unused-defs)))
+    (dolist (u unused)
+      (message "unused: %S" u))
+    )
+  )
 
 (provide 'ivy-plus)
