@@ -52,6 +52,11 @@
   "New counsel commands or enhancement to some existing counsel commands."
   :prefix "ivy-plus-" :group 'ivy)
 
+(defun ivy-plus-goto-line (line)
+  (goto-char (point-min))
+  (forward-line (1- line))
+  )
+
 (defun ivy-regex-pyim (str)
   (let ((x (ivy--regex-plus str))
 	(case-fold-search nil))
@@ -318,8 +323,8 @@
 
 (defvar counsel-frequent-buffer--frequency (make-heap #'counsel-frequent-buffer--compare))
 (defvar counsel-frequent-buffer--visited-count (make-hash-table :test #'equal))
+(defvar counsel-frequent-buffer--current (make-buf-freq))
 
-(defvar counsel-frequent-buffer--current nil)
 (defun counsel-frequent-buffer--match-function (record)
   (let ((current-key (buf-freq-bfile-name counsel-frequent-buffer--current))
 	(heap-key (buf-freq-bfile-name record)))
@@ -328,7 +333,7 @@
   )
 
 (defun counsel-frequent-buffer--visit-buffer (&optional arg)
-  (let ((buffer (current-buffer))
+  (let ((buffer (window-buffer))
 	(count 0)
 	(iter (heap-iter counsel-frequent-buffer--frequency))
 	(total-count (heap-size counsel-frequent-buffer--frequency))
@@ -340,14 +345,14 @@
       (setq bname (buffer-name buffer))
       (setq bfile-name (or (buffer-file-name buffer) bname))
 
-      (setq count (1+ (gethash bfile-name counsel-frequent-buffer--visited-count 0)))
+      ;; (message "bname %s, bfile-name %s" bname bfile-name)
 
-      ;; 最近访问的buffer后续还有可能会被访问，所以提升其count到比访问数最大的buffer(非自身的话)的count小1点。
+      (setq count (1+ (gethash bfile-name counsel-frequent-buffer--visited-count 0)))
+      ;; 最近访问的buffer后续还有可能会被访问，所以提升其count到比访问数最大的buffer(非自身的话)的count大1点。
       (setq root (heap-root counsel-frequent-buffer--frequency))
       (when root
 	(setq count (1+ (buf-freq-count root)))
 	)
-
       (puthash bfile-name count counsel-frequent-buffer--visited-count)
 
       (setq counsel-frequent-buffer--current (make-buf-freq :bname bname :count count :bfile-name bfile-name))
@@ -355,11 +360,14 @@
       (when (not (heap-modify counsel-frequent-buffer--frequency #'counsel-frequent-buffer--match-function counsel-frequent-buffer--current))
 	(heap-add counsel-frequent-buffer--frequency counsel-frequent-buffer--current)
 	)
+
+      ;; (message "heap %S" counsel-frequent-buffer--frequency)
+      ;; (message "map %S" counsel-frequent-buffer--visited-count)
       )
     )
   )
 
-(defun counsel-frequent-buffer--kill-buffer (&optional arg)
+(defun counsel-frequent-buffer--kill-buffer ()
   (let ((buffer (current-buffer))
 	(count 0)
 	bname
@@ -371,7 +379,6 @@
     (remhash bfile-name counsel-frequent-buffer--visited-count)
 
     (setq counsel-frequent-buffer--current (make-buf-freq :bname bname :count count :bfile-name bfile-name))
-
     (heap-modify counsel-frequent-buffer--frequency #'counsel-frequent-buffer--match-function counsel-frequent-buffer--current)
     )
   )
@@ -459,25 +466,26 @@
   (interactive)
   (setq counsel-frequent-buffer-obuf (current-buffer))
 
-  (let ((iter (heap-iter counsel-frequent-buffer--frequency))
+  (let (
 	(total-count (heap-size counsel-frequent-buffer--frequency))
 	(buffers nil)
 	(count 0)
 	(cand-count 0)
+        (copy-data (heap-copy counsel-frequent-buffer--frequency))
 	record
-	)
-    (while (and (< cand-count counsel-frequent-buffer-limit)
-		(< count total-count)
-		)
-      (setq record (iter-next iter))
-      (when (> (buf-freq-count record) 0)
-	(setq buffers (cl-pushnew record buffers))
-	(setq cand-count (1+ cand-count))
+        iter
+        root
 	)
 
+    (while (and (< cand-count counsel-frequent-buffer-limit)
+                (< count total-count))
+      (setq root (heap-delete-root copy-data))
+      (when (> (buf-freq-count root) 0)
+        (setq buffers (cl-pushnew root buffers))
+        (setq cand-count (1+ cand-count)))
       (setq count (1+ count))
       )
-    (iter-close iter)
+    (heap-clear copy-data)
 
     (setq buffers (mapcar (lambda (r) (cons (format "  %-48s    %s" (buf-freq-bname r) (buf-freq-bfile-name r)) r)) (nreverse buffers)))
 
@@ -676,7 +684,10 @@ the cdr is the usage form."
                 (rx-to-string `(seq symbol-start ,(symbol-name sym) symbol-end))
                 nil t)
           (-when-let (form (list-at-point))
-            (unless (equal definition-form form)
+            (unless (or (equal definition-form form)
+                        (counsel--looking-at-comment?)
+                        (counsel--looking-at-string?)
+                        )
               ;; Add this usage to `acc', unless it is the original definition.
               (push (cons (line-number-at-pos) form) acc)))))
       (nreverse acc))))
@@ -723,12 +734,49 @@ The result is a list of `counsel-el-ref'."
     )
   )
 
+(defun counsel-unused-definitions-update-fn ()
+  (with-ivy-window
+    (let ((current (ivy-state-current ivy-last))
+	  item
+          line
+	  )
+      (when (not (string-empty-p current))
+	(setq item (nth (get-text-property 0 'idx current) (ivy-state-collection ivy-last)))
+	(setq line (counsel-el-ref-line (cdr item)))
+	(ivy-plus-goto-line line)
+	(recenter)
+	(let ((pulse-delay 0.05))
+	  (pulse-momentary-highlight-one-line (point))
+	  )
+	)
+      ))
+  )
+
+(defvar counsel-unused-definitions-opoint nil)
 ;;;###autoload
 (defun counsel-unused-definitions ()
   (interactive)
-  (let ((unused (counsel--find-unused-defs)))
-    (dolist (u unused)
-      (message "unused: %S" u))
+
+  (setq counsel-unused-definitions-opoint (point))
+  
+  (let ((unused (counsel--find-unused-defs))
+        cands
+        res)
+    (setq cands (mapcar (lambda (u) (cons (format "%-6s   %-12s    %s" (counsel-el-ref-line u) (counsel-el-ref-type u) (counsel-el-ref-identifier u))
+                                          u))
+                        unused))
+
+    (unwind-protect
+        (setq res (ivy-read "Unused: " cands
+                            :action (lambda (u) (ivy-plus-goto-line (counsel-el-ref-line (cdr u))))
+                            :update-fn #'counsel-unused-definitions-update-fn
+                            :caller #'counsel-unused-definitions
+                            ))
+      (unless res
+	(goto-char counsel-unused-definitions-opoint)
+	(setq counsel-unused-definitions-opoint nil)
+	)
+      )
     )
   )
 
