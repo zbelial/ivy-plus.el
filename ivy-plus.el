@@ -335,7 +335,6 @@
 (defun counsel-frequent-buffer--visit-buffer (&optional arg)
   (let ((buffer (window-buffer))
 	(count 0)
-	(iter (heap-iter counsel-frequent-buffer--frequency))
 	(total-count (heap-size counsel-frequent-buffer--frequency))
 	root
 	bname
