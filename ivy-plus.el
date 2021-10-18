@@ -44,6 +44,7 @@
 (require 'dash)
 (require 'flymake)
 (require 'cl-lib)
+(require 'pulse)
 (eval-when-compile
   (require 'cl-macs)
   )
@@ -104,13 +105,13 @@
 
 (defvar ivy-switch-buffer+-obuf nil)
 (defun ivy-switch-buffer+-update-fn ()
-  (with-ivy-window
-    (let* ((current (ivy-state-current ivy-last))
-	   )
+  (let* ((current (ivy-state-current ivy-last))
+	 )
+    (with-ivy-window
       (if (get-buffer current)
 	  (set-window-buffer (selected-window) current)
-	(set-window-buffer (selected-window) ivy-switch-buffer+-obuf)
-	)
+        (set-window-buffer (selected-window) ivy-switch-buffer+-obuf)
+        )
       )))
 
 ;;;###autoload
@@ -144,21 +145,19 @@
 
 (defvar counsel-imenu+-opoint nil)
 (defun counsel-imenu+-update-fn ()
-  (with-ivy-window
-    (let ((current (ivy-state-current ivy-last))
-	  item
-	  pos
-	  )
-      (when (not (string-empty-p current))
-	(setq item (nth (get-text-property 0 'idx current) (ivy-state-collection ivy-last)))
-	(setq pos (cddr item))
-	(goto-char pos)
-	(recenter)
-	(let ((pulse-delay 0.05))
-	  (pulse-momentary-highlight-one-line (point))
-	  )
+  (let ((current (ivy-state-current ivy-last))
+	item
+	pos
 	)
-      )))
+    (with-ivy-window
+      (when (not (string-empty-p current))
+        (setq item (nth (get-text-property 0 'idx current) (ivy-state-collection ivy-last)))
+        (setq pos (cddr item))
+        (goto-char pos)
+        (recenter)
+        (let ((pulse-delay 0.05))
+	  (pulse-momentary-highlight-one-line (point))
+	  )))))
 
 (defun counsel-imenu+-action (x)
   (with-ivy-window
@@ -168,63 +167,64 @@
 
 ;;;###autoload
 (defun counsel-imenu+ ()
-  "Jump to a buffer position indexed by imenu."
-  (interactive)
-  (setq counsel-imenu+-opoint (point))
+"Jump to a buffer position indexed by imenu."
+(interactive)
+(setq counsel-imenu+-opoint (point))
 
-  (let* ((imenu-create-index-function #'imenu-default-create-index-function)
-	 (items (counsel--imenu-candidates))
-	 (preselect 0)
-	 (current-pos (point))
-	 (idx -1)
-	 (min (buffer-size))
-	 pos
-	 res)
-    (dolist (item items)
-      (setq idx (1+ idx))
-      (let ((marker (cddr item))
-	    )
-	(when marker
-	  (setq pos (marker-position marker))
-	  (when (and (<= pos current-pos) (< (- current-pos pos) min))
-	    (setq min (- current-pos pos))
-	    (setq preselect idx)))))
+(let* ((imenu-create-index-function #'imenu-default-create-index-function)
+       (items (counsel--imenu-candidates))
+       (preselect 0)
+       (current-pos (point))
+       (idx -1)
+       (min (buffer-size))
+       pos
+       res)
+  (dolist (item items)
+    (setq idx (1+ idx))
+    (let ((marker (cddr item))
+	  )
+      (when marker
+	(setq pos (marker-position marker))
+	(when (and (<= pos current-pos) (< (- current-pos pos) min))
+	  (setq min (- current-pos pos))
+	  (setq preselect idx)))))
 
-    (unwind-protect
-        (and 
-	 (setq res (ivy-read "imenu items: " items
-			     :preselect preselect
-			     :require-match t
-			     :action #'counsel-imenu+-action
-			     :keymap counsel-imenu-map
-			     :history 'counsel-imenu-history
-			     :update-fn #'counsel-imenu+-update-fn
-			     :caller 'counsel-imenu+))
-	 (point))
-      (unless res
-	(when counsel-imenu+-opoint
-	  (goto-char counsel-imenu+-opoint))
-	)
+  (unwind-protect
+      (and 
+       (setq res (ivy-read "imenu items: " items
+        		   :preselect preselect
+        		   :require-match t
+        		   :action #'counsel-imenu+-action
+        		   :keymap counsel-imenu-map
+        		   :history 'counsel-imenu-history
+        		   :update-fn #'counsel-imenu+-update-fn
+        		   :caller 'counsel-imenu+
+                           ))
+       (point))
+    (unless res
+      (when counsel-imenu+-opoint
+        (goto-char counsel-imenu+-opoint))
       )
-    ))
+    )
+  ))
 
 (defvar counsel-outline+-opoint nil)
 
 (defun counsel-outline+-update-fn ()
-  (with-ivy-window
-    (let ((current (ivy-state-current ivy-last))
-	  item
-	  marker
-	  )
+  (let ((current (ivy-state-current ivy-last))
+	item
+	marker
+	)
+    (with-ivy-window
       (when (not (string-empty-p current))
-	(setq item (nth (get-text-property 0 'idx current) (ivy-state-collection ivy-last)))
-	(setq marker (cdr item))
-	(goto-char marker)
-	(recenter)
-	(let ((pulse-delay 0.05))
+        (setq item (nth (get-text-property 0 'idx current) (ivy-state-collection ivy-last)))
+        (setq marker (cdr item))
+        (goto-char marker)
+        (recenter)
+        (let ((pulse-delay 0.05))
 	  (pulse-momentary-highlight-one-line (point))
 	  )
-	))))
+        ))))
 
 (defun counsel-outline+-action (x)
   "Go to outline X."
@@ -411,13 +411,13 @@
 (defvar counsel-frequent-buffer-tmp-selected-buf nil)
 (defun counsel-frequent-buffer-update-fn ()
   ;; (message "counsel-frequent-buffer-update-fn %d" (time-convert nil 'integer))
-  (with-ivy-window
-    (let* ((current (ivy-state-current ivy-last))
-	   item
-	   buffer
-	   (sitted nil)
-	   )
-      ;; (message "current %s" current)
+  (let* ((current (ivy-state-current ivy-last))
+	 item
+	 buffer
+	 (sitted nil)
+	 )
+    ;; (message "current %s" current)
+    (with-ivy-window
       (if (not (string-empty-p current))
 	  (progn
 	    (setq item (nth (get-text-property 0 'idx current) (ivy-state-collection ivy-last)))
@@ -431,12 +431,12 @@
 	          (set-window-buffer (selected-window) buffer)
 	        (set-window-buffer (selected-window) counsel-frequent-buffer-obuf)
 	        )))
-	;; 不匹配当前列表时，自动fallback到完整的列表(当前不再继续输入)
-	;; ;; FIXME 输入太快的话可能会hang
-	;; (while (input-pending-p)
-	;;   )
-	(counsel-frequent-buffer-fallback)
-	)
+        ;; 不匹配当前列表时，自动fallback到完整的列表(当前不再继续输入)
+        ;; ;; FIXME 输入太快的话可能会hang
+        ;; (while (input-pending-p)
+        ;;   )
+        (counsel-frequent-buffer-fallback)
+        )
       )
     )
   )
@@ -547,20 +547,20 @@
 
 
 (defun counsel-flymake--update-fn ()
-  (with-ivy-window
-    (let ((current (ivy-state-current ivy-last))
-	  item
-	  pos
-	  )
+  (let ((current (ivy-state-current ivy-last))
+	item
+	pos
+	)
+    (with-ivy-window
       (when (not (string-empty-p current))
-	(setq item (nth (get-text-property 0 'idx current) (ivy-state-collection ivy-last)))
-	(setq pos (plist-get (cdr item) :beg))
-	(goto-char pos)
-	(recenter)
-	(let ((pulse-delay 0.05))
+        (setq item (nth (get-text-property 0 'idx current) (ivy-state-collection ivy-last)))
+        (setq pos (plist-get (cdr item) :beg))
+        (goto-char pos)
+        (recenter)
+        (let ((pulse-delay 0.05))
 	  (pulse-momentary-highlight-one-line (point))
 	  )
-	)
+        )
       ))
   )
 
@@ -734,20 +734,20 @@ The result is a list of `counsel-el-ref'."
   )
 
 (defun counsel-unused-definitions-update-fn ()
-  (with-ivy-window
-    (let ((current (ivy-state-current ivy-last))
-	  item
-          line
-	  )
+  (let ((current (ivy-state-current ivy-last))
+	item
+        line
+	)
+    (with-ivy-window
       (when (not (string-empty-p current))
-	(setq item (nth (get-text-property 0 'idx current) (ivy-state-collection ivy-last)))
-	(setq line (counsel-el-ref-line (cdr item)))
-	(ivy-plus-goto-line line)
-	(recenter)
-	(let ((pulse-delay 0.05))
+        (setq item (nth (get-text-property 0 'idx current) (ivy-state-collection ivy-last)))
+        (setq line (counsel-el-ref-line (cdr item)))
+        (ivy-plus-goto-line line)
+        (recenter)
+        (let ((pulse-delay 0.05))
 	  (pulse-momentary-highlight-one-line (point))
 	  )
-	)
+        )
       ))
   )
 
