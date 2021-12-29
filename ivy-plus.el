@@ -310,6 +310,11 @@
   :type 'integer
   :group 'ivy)
 
+(defcustom counsel-frequent-buffer-auto-fallback nil
+  "Whether automatically call `counsel-frequent-buffer-fallback' when no match."
+  :type 'boolean
+  :group 'ivy)
+
 (cl-defstruct buf-freq "记录buffer访问次数"
 	      bname count bfile-name)
 
@@ -414,7 +419,6 @@
   (let* ((current (ivy-state-current ivy-last))
 	 item
 	 buffer
-	 (sitted nil)
 	 )
     ;; (message "current %s" current)
     (with-ivy-window
@@ -431,15 +435,8 @@
 	          (set-window-buffer (selected-window) buffer)
 	        (set-window-buffer (selected-window) counsel-frequent-buffer-obuf)
 	        )))
-        ;; 不匹配当前列表时，自动fallback到完整的列表(当前不再继续输入)
-        ;; ;; FIXME 输入太快的话可能会hang
-        ;; (while (input-pending-p)
-        ;;   )
-        (counsel-frequent-buffer-fallback)
-        )
-      )
-    )
-  )
+        (when counsel-frequent-buffer-auto-fallback
+          (counsel-frequent-buffer-fallback))))))
 
 (defun counsel-frequent-buffer-action (s)
   (let ((bname (buf-freq-bname (cdr s)))
