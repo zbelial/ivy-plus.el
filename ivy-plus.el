@@ -268,12 +268,50 @@
   text
   )
 
-(defvar ivy-plus--swiper-flag 0)
+;; (defvar counsel-rg+-opoint nil)
+;; (defvar counsel-rg+-obuf nil)
 
-(defun swiper-before-set-flag (&optional initial-input)
-  (setq ivy-plus--swiper-flag 1)
-  )
-(add-hook #'swiper :before #'swiper-before-set-flag)
+;; (defun counsel-rg+-buf (filename)
+;;   (cl-dolist (b (buffer-list))
+;;     (with-current-buffer b
+;;       (when (and (buffer-file-name b)
+;; 		 (string-equal (buffer-file-name b) filename))
+;; 	(cl-return b)
+;; 	))))
+
+;; (defun counsel-rg+-update-fn ()
+;;   (let ((current (ivy-state-current ivy-last))
+;;         buf
+;;         file
+;;         line
+;;         splits)
+;;     (with-ivy-window
+;;       (when (not (string-empty-p current))
+;;         (setq splits (split-string current ":"))
+;;         (setq file (nth 0 splits))
+;;         (setq line (nth 1 splits))
+;;         (setq file (expand-file-name file default-directory))
+;;         (setq buf (counsel-rg+-buf file))
+;;         (when buf
+;;           (switch-to-buffer buf)
+;;           (ivy-plus-goto-line (string-to-number line))
+;;           (recenter)
+;;           (let ((pulse-delay 0.05))
+;; 	    (pulse-momentary-highlight-one-line (point))
+;; 	    ))))))
+;; (ivy-configure 'counsel-rg
+;;   :update-fn #'counsel-rg+-update-fn)
+
+;; (defun counsel-rg+-unwind-fn ()
+;;   (counsel--grep-unwind)
+;;   (when counsel-rg+-obuf
+;;     (switch-to-buffer counsel-rg+-obuf)
+;;     (goto-char counsel-rg+-opoint)
+;;     (recenter)
+;;     (setq counsel-rg+-obuf nil)
+;;     (setq counsel-rg+-opoint nil)))
+;; (ivy-configure 'counsel-rg
+;;   :unwind-fn #'counsel-rg+-unwind-fn)
 
 ;;;###autoload
 (defun counsel-rg+ (&optional initial-input initial-directory extra-rg-args rg-prompt)
@@ -287,6 +325,12 @@
     )
   )
 
+(defvar ivy-plus--swiper-flag 0)
+(defun swiper-before-set-flag (&optional initial-input)
+  (setq ivy-plus--swiper-flag 1)
+  )
+(advice-add #'swiper :before #'swiper-before-set-flag)
+(advice-add #'swiper-isearch :before #'swiper-before-set-flag)
 
 ;;;###autoload
 (defun counsel-rg-upwards (&optional initial-input initial-directory extra-rg-args rg-prompt)
