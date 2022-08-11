@@ -46,8 +46,7 @@
 (require 'cl-lib)
 (require 'pulse)
 (eval-when-compile
-  (require 'cl-macs)
-  )
+  (require 'cl-macs))
 
 (defgroup ivy-plus nil
   "New counsel commands or enhancement to some existing counsel commands."
@@ -55,8 +54,7 @@
 
 (defun ivy-plus-goto-line (line)
   (goto-char (point-min))
-  (forward-line (1- line))
-  )
+  (forward-line (1- line)))
 
 (defun ivy-regex-pyim (str)
   (let ((x (ivy--regex-plus str))
@@ -99,20 +97,16 @@
 (defun ivy-regex-pinyinlib (str)
   (or (ivy--pinyin-to-utf8 str)
       (ivy--regex-plus str)
-      (ivy--regex-ignore-order str)
-      ))
+      (ivy--regex-ignore-order str)))
 
 
 (defvar ivy-switch-buffer+-obuf nil)
 (defun ivy-switch-buffer+-update-fn ()
-  (let* ((current (ivy-state-current ivy-last))
-	 )
+  (let* ((current (ivy-state-current ivy-last)))
     (with-ivy-window
       (if (get-buffer current)
 	  (set-window-buffer (selected-window) current)
-        (set-window-buffer (selected-window) ivy-switch-buffer+-obuf)
-        )
-      )))
+        (set-window-buffer (selected-window) ivy-switch-buffer+-obuf)))))
 
 ;;;###autoload
 (defun ivy-switch-buffer+ (&optional initial-input)
@@ -130,14 +124,10 @@
 			      :update-fn #'ivy-switch-buffer+-update-fn
 			      :matcher #'ivy--switch-buffer-matcher
 			      :caller 'ivy-switch-buffer
-			      :initial-input initial-input
-			      ))
-	  )
+			      :initial-input initial-input)))
       (unless res
 	(switch-to-buffer ivy-switch-buffer+-obuf t)
-	(setq ivy-switch-buffer+-obuf nil)
-	)
-      )))
+	(setq ivy-switch-buffer+-obuf nil)))))
 (ivy-configure 'ivy-switch-buffer+
   :parent 'internal-complete-buffer
   :occur #'ivy-switch-buffer-occur)
@@ -147,8 +137,7 @@
 (defun counsel-imenu+-update-fn ()
   (let ((current (ivy-state-current ivy-last))
 	item
-	pos
-	)
+	pos)
     (with-ivy-window
       (when (not (string-empty-p current))
         (setq item (nth (get-text-property 0 'idx current) (ivy-state-collection ivy-last)))
@@ -162,59 +151,57 @@
 (defun counsel-imenu+-action (x)
   (with-ivy-window
     (imenu (cdr x))
-    (recenter)
-    ))
+    (recenter)))
 
 ;;;###autoload
 (defun counsel-imenu+ ()
-"Jump to a buffer position indexed by imenu."
-(interactive)
-(setq counsel-imenu+-opoint (point))
+  "Jump to a buffer position indexed by imenu."
+  (interactive)
+  (setq counsel-imenu+-opoint (point))
 
-(let* ((imenu-create-index-function #'imenu-default-create-index-function)
-       (items (counsel--imenu-candidates))
-       (preselect 0)
-       (current-pos (point))
-       (idx -1)
-       (min (buffer-size))
-       pos
-       res)
-  (dolist (item items)
-    (setq idx (1+ idx))
-    (let ((marker (cddr item))
-	  )
-      (when marker
-	(setq pos (marker-position marker))
-	(when (and (<= pos current-pos) (< (- current-pos pos) min))
-	  (setq min (- current-pos pos))
-	  (setq preselect idx)))))
+  (let* ((imenu-create-index-function
+          (cond
+           ((eq major-mode 'python-mode)
+            #'python-imenu-create-index)
+           (t
+            #'imenu-default-create-index-function)))
+         (items (counsel--imenu-candidates))
+         (preselect 0)
+         (current-pos (point))
+         (idx -1)
+         (min (buffer-size))
+         pos
+         res)
+    (dolist (item items)
+      (setq idx (1+ idx))
+      (let ((marker (cddr item)))
+        (when marker
+	  (setq pos (marker-position marker))
+	  (when (and (<= pos current-pos) (< (- current-pos pos) min))
+	    (setq min (- current-pos pos))
+	    (setq preselect idx)))))
 
-  (unwind-protect
-      (and 
-       (setq res (ivy-read "imenu items: " items
-        		   :preselect preselect
-        		   :require-match t
-        		   :action #'counsel-imenu+-action
-        		   :keymap counsel-imenu-map
-        		   :history 'counsel-imenu-history
-        		   :update-fn #'counsel-imenu+-update-fn
-        		   :caller 'counsel-imenu+
-                           ))
-       (point))
-    (unless res
-      (when counsel-imenu+-opoint
-        (goto-char counsel-imenu+-opoint))
-      )
-    )
-  ))
+    (unwind-protect
+        (and 
+         (setq res (ivy-read "imenu items: " items
+        		     :preselect preselect
+        		     :require-match t
+        		     :action #'counsel-imenu+-action
+        		     :keymap counsel-imenu-map
+        		     :history 'counsel-imenu-history
+        		     :update-fn #'counsel-imenu+-update-fn
+        		     :caller 'counsel-imenu+))
+         (point))
+      (unless res
+        (when counsel-imenu+-opoint
+          (goto-char counsel-imenu+-opoint))))))
 
 (defvar counsel-outline+-opoint nil)
 
 (defun counsel-outline+-update-fn ()
   (let ((current (ivy-state-current ivy-last))
 	item
-	marker
-	)
+	marker)
     (with-ivy-window
       (when (not (string-empty-p current))
         (setq item (nth (get-text-property 0 'idx current) (ivy-state-collection ivy-last)))
@@ -222,15 +209,12 @@
         (goto-char marker)
         (recenter)
         (let ((pulse-delay 0.05))
-	  (pulse-momentary-highlight-one-line (point))
-	  )
-        ))))
+	  (pulse-momentary-highlight-one-line (point)))))))
 
 (defun counsel-outline+-action (x)
   "Go to outline X."
   (goto-char (cdr x))
-  (recenter)
-  )
+  (recenter))
 
 ;;;###autoload
 (defun counsel-outline+ ()
@@ -251,22 +235,16 @@
 			     :update-fn #'counsel-outline+-update-fn
 			     :caller (or (plist-get settings :caller)
 					 'counsel-outline+)))
-	 (point)
-	 )
+	 (point))
       (unless res
-	(goto-char counsel-outline+-opoint)
-	)
-      )))
+	(goto-char counsel-outline+-opoint)))))
 
 (defun counsel-rg+-remove-boundaries (text)
   (when (string-prefix-p "\\_<" text)
-    (setq text (substring text 3))
-    )
+    (setq text (substring text 3)))
   (when (string-suffix-p "\\_>" text)
-    (setq text (substring text 0 (- (length text) 3)))
-    )
-  text
-  )
+    (setq text (substring text 0 (- (length text) 3))))
+  text)
 
 ;; (defvar counsel-rg+-opoint nil)
 ;; (defvar counsel-rg+-obuf nil)
@@ -317,18 +295,13 @@
 (defun counsel-rg+ (&optional initial-input initial-directory extra-rg-args rg-prompt)
   "Search upwards in the directory tree."
   (interactive)
-  (let ((text (or ivy-text initial-input))
-	)
+  (let ((text (or ivy-text initial-input)))
     (ivy-quit-and-run
-      (counsel-rg (counsel-rg+-remove-boundaries text) initial-directory extra-rg-args rg-prompt)
-      )
-    )
-  )
+      (counsel-rg (counsel-rg+-remove-boundaries text) initial-directory extra-rg-args rg-prompt))))
 
 (defvar ivy-plus--swiper-flag 0)
 (defun swiper-before-set-flag (&optional initial-input)
-  (setq ivy-plus--swiper-flag 1)
-  )
+  (setq ivy-plus--swiper-flag 1))
 (advice-add #'swiper :before #'swiper-before-set-flag)
 (advice-add #'swiper-isearch :before #'swiper-before-set-flag)
 
@@ -337,17 +310,12 @@
   "Search upwards in the directory tree."
   (interactive)
   (let ((dir (file-name-directory (directory-file-name (or initial-directory default-directory))))
-	(text (or ivy-text initial-input))
-	)
+	(text (or ivy-text initial-input)))
     (when (= ivy-plus--swiper-flag 1)
       (setq dir default-directory)
-      (setq ivy-plus--swiper-flag 0)
-      )
+      (setq ivy-plus--swiper-flag 0))
     (ivy-quit-and-run
-      (counsel-rg (counsel-rg+-remove-boundaries text) dir extra-rg-args rg-prompt)
-      )
-    )
-  )
+      (counsel-rg (counsel-rg+-remove-boundaries text) dir extra-rg-args rg-prompt))))
 
 (defcustom counsel-frequent-buffer-limit 10
   "How many buffers displayed when switching."
@@ -365,9 +333,7 @@
 (defun counsel-frequent-buffer--compare (a b)
   (let ((count-a (buf-freq-count a))
 	(count-b (buf-freq-count b)))
-    (> count-a count-b)
-    )
-  )
+    (> count-a count-b)))
 ;; (counsel-frequent-buffer--compare  (list "a" 1) (list "b" 3))
 
 (defvar counsel-frequent-buffer--frequency (make-heap #'counsel-frequent-buffer--compare))
@@ -377,9 +343,7 @@
 (defun counsel-frequent-buffer--match-function (record)
   (let ((current-key (buf-freq-bfile-name counsel-frequent-buffer--current))
 	(heap-key (buf-freq-bfile-name record)))
-    (and current-key (string-equal current-key heap-key))
-    )
-  )
+    (and current-key (string-equal current-key heap-key))))
 
 (defun counsel-frequent-buffer--visit-buffer (&optional arg)
   (let ((buffer (window-buffer))
@@ -387,8 +351,7 @@
 	(total-count (heap-size counsel-frequent-buffer--frequency))
 	root
 	bname
-	bfile-name
-	)
+	bfile-name)
     (unless (minibufferp buffer)
       (setq bname (buffer-name buffer))
       (setq bfile-name (or (buffer-file-name buffer) bname))
@@ -399,37 +362,30 @@
       ;; 最近访问的buffer后续还有可能会被访问，所以提升其count到比访问数最大的buffer(非自身的话)的count大1点。
       (setq root (heap-root counsel-frequent-buffer--frequency))
       (when root
-	(setq count (1+ (buf-freq-count root)))
-	)
+	(setq count (1+ (buf-freq-count root))))
       (puthash bfile-name count counsel-frequent-buffer--visited-count)
 
       (setq counsel-frequent-buffer--current (make-buf-freq :bname bname :count count :bfile-name bfile-name))
 
       (when (not (heap-modify counsel-frequent-buffer--frequency #'counsel-frequent-buffer--match-function counsel-frequent-buffer--current))
-	(heap-add counsel-frequent-buffer--frequency counsel-frequent-buffer--current)
-	)
+	(heap-add counsel-frequent-buffer--frequency counsel-frequent-buffer--current))
 
       ;; (message "heap %S" counsel-frequent-buffer--frequency)
       ;; (message "map %S" counsel-frequent-buffer--visited-count)
-      )
-    )
-  )
+      )))
 
 (defun counsel-frequent-buffer--kill-buffer ()
   (let ((buffer (current-buffer))
 	(count 0)
 	bname
-	bfile-name
-	)
+	bfile-name)
     (setq bname (buffer-name buffer))
     (setq bfile-name (or (buffer-file-name buffer) bname))
 
     (remhash bfile-name counsel-frequent-buffer--visited-count)
 
     (setq counsel-frequent-buffer--current (make-buf-freq :bname bname :count count :bfile-name bfile-name))
-    (heap-modify counsel-frequent-buffer--frequency #'counsel-frequent-buffer--match-function counsel-frequent-buffer--current)
-    )
-  )
+    (heap-modify counsel-frequent-buffer--frequency #'counsel-frequent-buffer--match-function counsel-frequent-buffer--current)))
 
 (add-hook 'window-buffer-change-functions #'counsel-frequent-buffer--visit-buffer)
 ;; (remove-hook 'window-buffer-change-functions #'counsel-frequent-buffer--visit-buffer)
@@ -450,11 +406,9 @@
 ;;;###autoload
 (defun counsel-frequent-buffer-fallback ()
   (interactive)
-  (let ((text (or ivy-text initial-input))
-	)
+  (let ((text (or ivy-text initial-input)))
     (ivy-quit-and-run
-      (ivy-switch-buffer+ text)
-      )))
+      (ivy-switch-buffer+ text))))
 
 (defvar counsel-frequent-buffer-obuf nil)
 (defvar counsel-frequent-buffer-tmp-selected-buf nil)
@@ -462,8 +416,7 @@
   ;; (message "counsel-frequent-buffer-update-fn %d" (time-convert nil 'integer))
   (let* ((current (ivy-state-current ivy-last))
 	 item
-	 buffer
-	 )
+	 buffer)
     ;; (message "current %s" current)
     (with-ivy-window
       (if (not (string-empty-p current))
@@ -484,8 +437,7 @@
 
 (defun counsel-frequent-buffer-action (s)
   (let ((bname (buf-freq-bname (cdr s)))
-	(bfile-name (buf-freq-bfile-name (cdr s)))
-	)
+	(bfile-name (buf-freq-bfile-name (cdr s))))
     (if (bufferp bname)
         (switch-to-buffer bname)
       (cl-dolist (b (buffer-list))
@@ -493,13 +445,9 @@
 	  (when (and (buffer-file-name b)
 		     (string-equal (buffer-file-name b) bfile-name))
 	    (setq bname b)
-	    (cl-return nil)
-	    ))
-	)
-      (switch-to-buffer bname)
-      )
-    )
-  )
+	    (cl-return nil))))
+      (switch-to-buffer bname))))
+
 ;;;###autoload
 (defun counsel-frequent-buffer ()
   "Switch to frequently visited buffers."
@@ -514,8 +462,7 @@
         (copy-data (heap-copy counsel-frequent-buffer--frequency))
 	record
         iter
-        root
-	)
+        root)
 
     (while (and (< cand-count counsel-frequent-buffer-limit)
                 (< count total-count))
@@ -523,8 +470,7 @@
       (when (> (buf-freq-count root) 0)
         (setq buffers (cl-pushnew root buffers))
         (setq cand-count (1+ cand-count)))
-      (setq count (1+ count))
-      )
+      (setq count (1+ count)))
     (heap-clear copy-data)
 
     (setq buffers (mapcar (lambda (r) (cons (format "  %-48s    %s" (buf-freq-bname r) (buf-freq-bfile-name r)) r)) (nreverse buffers)))
@@ -536,42 +482,29 @@
 			      :preselect 1
 			      :keymap counsel-frequent-buffer-map
 			      :update-fn #'counsel-frequent-buffer-update-fn
-			      :caller #'counsel-frequent-buffer
-			      )
-	        )          
+			      :caller #'counsel-frequent-buffer))          
 	(unless res
 	  (switch-to-buffer counsel-frequent-buffer-obuf t)
-	  (setq counsel-frequent-buffer-obuf nil)
-	  )
-	)
-      )))
+	  (setq counsel-frequent-buffer-obuf nil))))))
 
 (defun counsel-flymake--format-type (type)
   (let (face
 	display-type
-	(type (symbol-name type))
-	)
+	(type (symbol-name type)))
     (cond
      ((string-suffix-p "note" type)
       (setq display-type "note")
-      (setq face 'success)
-      )
+      (setq face 'success))
      ((string-suffix-p "warning" type)
       (setq display-type "warning")
-      (setq face 'warning)
-      )
+      (setq face 'warning))
      ((string-suffix-p "error" type)
       (setq display-type "error")
-      (setq face 'error)
-      )
+      (setq face 'error))
      (t
       (setq display-type "note")
-      (setq face 'warning)
-      )
-     )
-    (propertize (format "%s" display-type) 'face face)
-    )
-  )
+      (setq face 'warning)))
+    (propertize (format "%s" display-type) 'face face)))
 
 (defun counsel-flymake--formatter (diag)
   (let* (msg
@@ -579,19 +512,15 @@
 	 (end (flymake--diag-end diag))
 	 (type (flymake--diag-type diag))
 	 (text (flymake--diag-text diag))
-	 (line (line-number-at-pos beg))
-	 )
+	 (line (line-number-at-pos beg)))
     (setq msg (format "%-8d  %-12s    %s" line (counsel-flymake--format-type type) text))
-    (cons msg (list :line line :type type :text text :beg beg :end end))
-    )
-  )
+    (cons msg (list :line line :type type :text text :beg beg :end end))))
 
 
 (defun counsel-flymake--update-fn ()
   (let ((current (ivy-state-current ivy-last))
 	item
-	pos
-	)
+	pos)
     (with-ivy-window
       (when (not (string-empty-p current))
         (setq item (nth (get-text-property 0 'idx current) (ivy-state-collection ivy-last)))
@@ -599,11 +528,7 @@
         (goto-char pos)
         (recenter)
         (let ((pulse-delay 0.05))
-	  (pulse-momentary-highlight-one-line (point))
-	  )
-        )
-      ))
-  )
+	  (pulse-momentary-highlight-one-line (point)))))))
 
 (defvar counsel-flymake--opoint nil)
 ;;;###autoload
@@ -614,8 +539,7 @@
 
   (let ((diagnostics (flymake-diagnostics))
 	records
-	res
-	)
+	res)
     (setq records (mapcar #'counsel-flymake--formatter diagnostics))
     (unwind-protect
         (setq res (ivy-read "Diagnostics: " records
@@ -625,20 +549,11 @@
 					       (goto-char (plist-get diag :beg))
 					       (recenter)
 					       (let ((pulse-delay 0.05))
-					         (pulse-momentary-highlight-one-line (point))
-					         )
-					       )
-					     )
-				       )
-				      )
-			    :update-fn #'counsel-flymake--update-fn)
-	      )
+					         (pulse-momentary-highlight-one-line (point)))))))
+			    :update-fn #'counsel-flymake--update-fn))
       (unless res
 	(goto-char counsel-flymake--opoint)
-	(setq counsel-flymake--opoint nil))
-      )
-    )
-  )
+	(setq counsel-flymake--opoint nil)))))
 
 
 (defcustom counsel-el-definition-macro-names
@@ -726,8 +641,7 @@ the cdr is the usage form."
           (-when-let (form (list-at-point))
             (unless (or (equal definition-form form)
                         (counsel--looking-at-comment?)
-                        (counsel--looking-at-string?)
-                        )
+                        (counsel--looking-at-string?))
               ;; Add this usage to `acc', unless it is the original definition.
               (push (cons (line-number-at-pos) form) acc)))))
       (nreverse acc))))
@@ -770,15 +684,12 @@ The result is a list of `counsel-el-ref'."
                                         :identifier (nth 1 form)
                                         :form form)
                    acc)))))
-          (nreverse acc))))
-    )
-  )
+          (nreverse acc))))))
 
 (defun counsel-unused-definitions-update-fn ()
   (let ((current (ivy-state-current ivy-last))
 	item
-        line
-	)
+        line)
     (with-ivy-window
       (when (not (string-empty-p current))
         (setq item (nth (get-text-property 0 'idx current) (ivy-state-collection ivy-last)))
@@ -786,11 +697,7 @@ The result is a list of `counsel-el-ref'."
         (ivy-plus-goto-line line)
         (recenter)
         (let ((pulse-delay 0.05))
-	  (pulse-momentary-highlight-one-line (point))
-	  )
-        )
-      ))
-  )
+	  (pulse-momentary-highlight-one-line (point)))))))
 
 (defvar counsel-unused-definitions-opoint nil)
 ;;;###autoload
@@ -810,14 +717,9 @@ The result is a list of `counsel-el-ref'."
         (setq res (ivy-read "Unused: " cands
                             :action (lambda (u) (ivy-plus-goto-line (counsel-el-ref-line (cdr u))))
                             :update-fn #'counsel-unused-definitions-update-fn
-                            :caller #'counsel-unused-definitions
-                            ))
+                            :caller #'counsel-unused-definitions))
       (unless res
 	(goto-char counsel-unused-definitions-opoint)
-	(setq counsel-unused-definitions-opoint nil)
-	)
-      )
-    )
-  )
+	(setq counsel-unused-definitions-opoint nil)))))
 
 (provide 'ivy-plus)
