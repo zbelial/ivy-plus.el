@@ -132,6 +132,35 @@
   :parent 'internal-complete-buffer
   :occur #'ivy-switch-buffer-occur)
 
+;;;###autoload
+(defun ivy-switch-buffer+-same-mode (&optional initial-input)
+  "Switch to another buffer."
+  (interactive)
+  (setq ivy-switch-buffer+-obuf (current-buffer))
+
+  (let ((mode (with-current-buffer ivy-switch-buffer+-obuf
+                major-mode))
+        buffers
+        res)
+    (dolist (buffer (buffer-list))
+      (with-current-buffer buffer
+        (when (eq major-mode mode)
+          (cl-pushnew buffer buffers))))
+    (unwind-protect
+        (progn
+          (setq buffers (mapcar (lambda (r) (buffer-name r)) (nreverse buffers)))
+          
+	  (setq res (ivy-read "Switch to buffer: " buffers
+			      :keymap ivy-switch-buffer-map
+			      :preselect 1
+			      :action #'ivy--switch-buffer-action
+			      :update-fn #'ivy-switch-buffer+-update-fn
+			      :matcher #'ivy--switch-buffer-matcher
+			      :caller 'ivy-switch-buffer
+			      :initial-input initial-input)))
+      (unless res
+	(switch-to-buffer ivy-switch-buffer+-obuf t)
+	(setq ivy-switch-buffer+-obuf nil)))))
 
 (defvar counsel-imenu+-opoint nil)
 (defun counsel-imenu+-update-fn ()
@@ -245,51 +274,6 @@
   (when (string-suffix-p "\\_>" text)
     (setq text (substring text 0 (- (length text) 3))))
   text)
-
-;; (defvar counsel-rg+-opoint nil)
-;; (defvar counsel-rg+-obuf nil)
-
-;; (defun counsel-rg+-buf (filename)
-;;   (cl-dolist (b (buffer-list))
-;;     (with-current-buffer b
-;;       (when (and (buffer-file-name b)
-;; 		 (string-equal (buffer-file-name b) filename))
-;; 	(cl-return b)
-;; 	))))
-
-;; (defun counsel-rg+-update-fn ()
-;;   (let ((current (ivy-state-current ivy-last))
-;;         buf
-;;         file
-;;         line
-;;         splits)
-;;     (with-ivy-window
-;;       (when (not (string-empty-p current))
-;;         (setq splits (split-string current ":"))
-;;         (setq file (nth 0 splits))
-;;         (setq line (nth 1 splits))
-;;         (setq file (expand-file-name file default-directory))
-;;         (setq buf (counsel-rg+-buf file))
-;;         (when buf
-;;           (switch-to-buffer buf)
-;;           (ivy-plus-goto-line (string-to-number line))
-;;           (recenter)
-;;           (let ((pulse-delay 0.05))
-;; 	    (pulse-momentary-highlight-one-line (point))
-;; 	    ))))))
-;; (ivy-configure 'counsel-rg
-;;   :update-fn #'counsel-rg+-update-fn)
-
-;; (defun counsel-rg+-unwind-fn ()
-;;   (counsel--grep-unwind)
-;;   (when counsel-rg+-obuf
-;;     (switch-to-buffer counsel-rg+-obuf)
-;;     (goto-char counsel-rg+-opoint)
-;;     (recenter)
-;;     (setq counsel-rg+-obuf nil)
-;;     (setq counsel-rg+-opoint nil)))
-;; (ivy-configure 'counsel-rg
-;;   :unwind-fn #'counsel-rg+-unwind-fn)
 
 ;;;###autoload
 (defun counsel-rg+ (&optional initial-input initial-directory extra-rg-args rg-prompt)
