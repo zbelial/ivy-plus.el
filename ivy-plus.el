@@ -38,7 +38,7 @@
 
 (require 'ivy)
 (require 'counsel)
-(require 'pyim)
+(require 'pyim-cregexp-utils)
 (require 'pinyinlib)
 (require 'heap)
 (require 'dash)
